@@ -1,13 +1,14 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { Camera, CheckCircle2, Clock, Loader2, Package, RefreshCcw, Upload, WalletCards } from "lucide-react";
+import { Camera, CheckCircle2, Clock, Loader2, Package, RefreshCcw, WalletCards } from "lucide-react";
+import { PhotoUploader } from "@/components/upload/photo-uploader";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Metric } from "@/components/ui/metric";
 import { demoOrders, demoProgress } from "@/lib/demo-data";
-import type { ProgressMilestone } from "@/lib/types";
+import type { OrderRecord, ProgressMilestone } from "@/lib/types";
 
 const milestones: Array<{ value: ProgressMilestone; label: string }> = [
   { value: "before", label: "Before" },
@@ -17,10 +18,7 @@ const milestones: Array<{ value: ProgressMilestone; label: string }> = [
 ];
 
 export function DashboardPage() {
-  const [milestone, setMilestone] = useState<ProgressMilestone>("day_90");
-  const [file, setFile] = useState<File | null>(null);
-  const [notes, setNotes] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [orders, setOrders] = useState<OrderRecord[]>(demoOrders);
   const [claimLoading, setClaimLoading] = useState(false);
   const [message, setMessage] = useState("");
 
@@ -33,33 +31,32 @@ export function DashboardPage() {
     []
   );
 
-  async function uploadProgress(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setLoading(true);
-    setMessage("");
+  useEffect(() => {
+    let active = true;
 
-    try {
-      const formData = new FormData();
-      formData.append("milestone", milestone);
-      formData.append("notes", notes);
-      if (file) {
-        formData.append("photo", file);
+    async function loadOrders() {
+      try {
+        const response = await fetch("/api/orders", {
+          cache: "no-store"
+        });
+        const data = await response.json();
+
+        if (active && response.ok) {
+          setOrders(data.orders || []);
+        }
+      } catch {
+        if (active) {
+          setOrders(demoOrders);
+        }
       }
-
-      const response = await fetch("/api/progress", {
-        method: "POST",
-        body: formData
-      });
-      const data = await response.json();
-      setMessage(data.message || "Progress uploaded.");
-      setFile(null);
-      setNotes("");
-    } catch {
-      setMessage("Progress upload failed. Check Supabase Storage configuration.");
-    } finally {
-      setLoading(false);
     }
-  }
+
+    void loadOrders();
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   async function requestRefund() {
     setClaimLoading(true);
@@ -73,6 +70,12 @@ export function DashboardPage() {
         })
       });
       const data = await response.json();
+
+      if (response.status === 401) {
+        window.location.assign("/login?next=/dashboard");
+        return;
+      }
+
       setMessage(data.message || "Guarantee request submitted.");
     } catch {
       setMessage("Guarantee request could not be submitted.");
@@ -126,44 +129,9 @@ export function DashboardPage() {
 
           <Card light>
             <h2 className="text-2xl font-black">Progress upload</h2>
-            <form onSubmit={uploadProgress} className="mt-5 space-y-4">
-              <label className="block">
-                <span className="text-sm font-semibold text-ink/70">Milestone</span>
-                <select
-                  value={milestone}
-                  onChange={(event) => setMilestone(event.target.value as ProgressMilestone)}
-                  className="mt-2 w-full rounded-lg border border-ink/10 bg-white px-4 py-3 outline-none focus:border-aqua"
-                >
-                  {milestones.map((item) => (
-                    <option key={item.value} value={item.value}>
-                      {item.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="block">
-                <span className="text-sm font-semibold text-ink/70">Photo</span>
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={(event) => setFile(event.target.files?.[0] || null)}
-                  className="mt-2 w-full rounded-lg border border-dashed border-ink/20 bg-white px-4 py-5 text-sm"
-                />
-              </label>
-              <label className="block">
-                <span className="text-sm font-semibold text-ink/70">Notes</span>
-                <textarea
-                  value={notes}
-                  onChange={(event) => setNotes(event.target.value)}
-                  className="mt-2 min-h-24 w-full rounded-lg border border-ink/10 bg-white px-4 py-3 outline-none focus:border-aqua"
-                  placeholder="Shedding, irritation, adherence, or visible changes"
-                />
-              </label>
-              <Button type="submit" disabled={loading} className="w-full">
-                {loading ? <Loader2 className="size-4 animate-spin" /> : <Upload className="size-4" />}
-                Upload milestone
-              </Button>
-            </form>
+            <div className="mt-5">
+              <PhotoUploader onMessage={setMessage} />
+            </div>
           </Card>
         </div>
 
@@ -171,15 +139,18 @@ export function DashboardPage() {
           <Card light className="lg:col-span-2">
             <h2 className="text-2xl font-black">Orders and subscription</h2>
             <div className="mt-5 overflow-hidden rounded-lg border border-ink/10">
-              {demoOrders.map((order) => (
+              {orders.slice(0, 3).map((order) => (
                 <div key={order.id} className="grid gap-3 border-b border-ink/10 bg-white p-4 last:border-b-0 md:grid-cols-4">
                   <p className="font-bold">{order.id}</p>
-                  <p className="capitalize text-ink/60">{order.plan_type.replace("_", " ")}</p>
+                  <p className="capitalize text-ink/60">{(order.planType || order.plan_type).replace("_", " ")}</p>
                   <p className="font-bold">₹{order.amount.toLocaleString("en-IN")}</p>
-                  <p className="text-leaf">{order.status}</p>
+                  <p className="text-leaf">{order.deliveryStatus || order.status}</p>
                 </div>
               ))}
             </div>
+            <Button href="/orders" variant="ghost" className="mt-5">
+              View all orders
+            </Button>
           </Card>
 
           <Card light>

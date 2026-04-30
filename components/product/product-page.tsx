@@ -1,11 +1,21 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { ArrowRight, Check, Loader2, Package, Repeat, ShoppingCart, ShieldCheck, Truck } from "lucide-react";
+import {
+  ArrowRight,
+  Check,
+  Loader2,
+  Package,
+  Repeat,
+  ShieldCheck,
+  ShoppingCart,
+  Truck
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import type { CartPlan } from "@/lib/types";
+import type { CartPlan, ShippingAddress } from "@/lib/types";
 
 declare global {
   interface Window {
@@ -13,28 +23,42 @@ declare global {
   }
 }
 
-const kit = [
+const plans = [
   {
-    name: "Minoxidil",
-    detail: "Topical support for regrowth routines",
-    color: "bg-aqua"
+    amount: 2499,
+    badge: "Best for continuity",
+    copy: "Monthly refills, adherence tracking, and 90-day progress checkpoints.",
+    icon: Repeat,
+    label: "Monthly Treatment",
+    planType: "subscription" as const
   },
   {
-    name: "Finasteride",
-    detail: "Clinician-review prompt and eligibility workflow",
-    color: "bg-coral"
-  },
-  {
-    name: "Derma roller",
-    detail: "Weekly micro-stimulation protocol",
-    color: "bg-saffron"
-  },
-  {
-    name: "Scalp shampoo",
-    detail: "Low-irritation cleansing and scalp care",
-    color: "bg-leaf"
+    amount: 7499,
+    badge: "90-day starter",
+    copy: "Full kit for a structured 90-day routine with guarantee evidence tracking.",
+    icon: ShoppingCart,
+    label: "One-time Hair Kit",
+    planType: "one_time" as const
   }
 ];
+
+const kit = [
+  "Topical minoxidil support routine",
+  "Clinician-review prompt for finasteride eligibility",
+  "0.5 mm derma roller protocol",
+  "Scalp shampoo and adherence checklist",
+  "Before, 30, 60, and 90-day photo tracking"
+];
+
+const initialAddress: ShippingAddress = {
+  city: "",
+  line1: "",
+  line2: "",
+  name: "",
+  phone: "",
+  postalCode: "",
+  state: ""
+};
 
 function loadRazorpayScript() {
   return new Promise<boolean>((resolve) => {
@@ -52,26 +76,65 @@ function loadRazorpayScript() {
 }
 
 export function ProductPage() {
-  const [plan, setPlan] = useState<CartPlan>("subscription");
-  const [cartAdded, setCartAdded] = useState(false);
+  const router = useRouter();
+  const [planType, setPlanType] = useState<CartPlan>("subscription");
+  const [address, setAddress] = useState<ShippingAddress>(initialAddress);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
-  const price = plan === "subscription" ? 2499 : 7499;
+
+  const selectedPlan = useMemo(
+    () => plans.find((plan) => plan.planType === planType) || plans[0],
+    [planType]
+  );
+
+  function updateAddress(key: keyof ShippingAddress, value: string) {
+    setAddress((current) => ({
+      ...current,
+      [key]: value
+    }));
+  }
+
+  async function verifyPayment(payload: Record<string, unknown>, checkout: Record<string, unknown>) {
+    const response = await fetch("/api/payments/verify", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        ...payload,
+        localOrderId: checkout.localOrderId,
+        localSubscriptionId: checkout.localSubscriptionId,
+        type: checkout.type
+      })
+    });
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || "Payment verification failed.");
+    }
+
+    return data;
+  }
 
   async function checkout() {
     setLoading(true);
     setMessage("");
 
     try {
-      const response = await fetch("/api/checkout", {
+      const response = await fetch("/api/payments/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ plan })
+        body: JSON.stringify({ address, planType })
       });
       const data = await response.json();
 
-      if (data.checkout.mode === "demo") {
-        setMessage("Demo checkout created. Add Razorpay keys to open the live payment modal.");
+      if (response.status === 401) {
+        router.push("/login?next=/pricing");
+        return;
+      }
+
+      if (!response.ok) {
+        setMessage(data.error || "Could not create checkout.");
         return;
       }
 
@@ -81,15 +144,30 @@ export function ProductPage() {
         return;
       }
 
+      const checkoutData = data.checkout as Record<string, unknown>;
       const instance = new window.Razorpay({
+        amount: checkoutData.amount,
+        currency: checkoutData.currency,
+        description: selectedPlan.label,
+        handler: async (paymentResponse: Record<string, unknown>) => {
+          try {
+            await verifyPayment(paymentResponse, checkoutData);
+            setMessage("Payment verified. Your order is now active.");
+            router.push("/orders");
+            router.refresh();
+          } catch (error) {
+            setMessage(error instanceof Error ? error.message : "Payment verification failed.");
+          }
+        },
         key: data.publicKey,
-        amount: data.checkout.amount,
-        currency: data.checkout.currency,
         name: "AviEx Hair Recovery",
-        description:
-          plan === "subscription" ? "Monthly AI hair recovery subscription" : "Personalized hair recovery kit",
-        order_id: data.checkout.orderId || undefined,
-        subscription_id: data.checkout.subscriptionId || undefined,
+        order_id: checkoutData.type === "order" ? checkoutData.orderId : undefined,
+        prefill: {
+          contact: address.phone,
+          name: address.name
+        },
+        subscription_id:
+          checkoutData.type === "subscription" ? checkoutData.subscriptionId : undefined,
         theme: { color: "#09111f" }
       });
       instance.open();
@@ -101,112 +179,105 @@ export function ProductPage() {
   }
 
   return (
-    <section className="px-4 py-12 sm:px-6 lg:px-8">
-      <div className="mx-auto grid max-w-7xl gap-8 lg:grid-cols-[1fr_0.9fr] lg:items-start">
+    <section className="px-4 py-10 sm:px-6 lg:px-8">
+      <div className="mx-auto grid max-w-7xl gap-8 lg:grid-cols-[0.95fr_1.05fr] lg:items-start">
         <div>
-          <p className="text-sm font-bold uppercase text-aqua">Recovery kit</p>
-          <h1 className="mt-3 text-4xl font-black md:text-6xl">
-            Personalized treatment, shipped with a 90-day tracking system
+          <p className="text-sm font-bold uppercase text-aqua">Pricing</p>
+          <h1 className="mt-3 text-4xl font-black leading-tight md:text-6xl">
+            Choose your AI-guided hair recovery plan
           </h1>
           <p className="mt-5 max-w-2xl text-white/70">
-            The kit combines topical support, clinician-review medication workflow, scalp stimulation,
-            and photo-based accountability.
+            Payments are handled by Razorpay. Orders, subscriptions, delivery state, and the 90-day
+            guarantee window are stored securely against your account.
           </p>
 
-          <div className="mt-10 grid gap-4 sm:grid-cols-2">
-            {kit.map((item, index) => (
-              <motion.div
-                key={item.name}
-                initial={{ opacity: 0, y: 16 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.08 }}
-              >
-                <Card className="h-full">
-                  <div className="mb-5 flex min-h-36 items-end gap-4 rounded-lg border border-white/10 bg-white/10 p-4">
-                    <div className={`h-24 w-14 rounded-lg ${item.color} shadow-glow`} />
-                    <div className="h-32 w-16 rounded-lg border border-white/20 bg-white/10" />
-                    <div className="h-20 w-20 rounded-lg border border-white/20 bg-white/10" />
-                  </div>
-                  <p className="text-xl font-black">{item.name}</p>
-                  <p className="mt-2 text-sm leading-6 text-white/60">{item.detail}</p>
-                </Card>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-
-        <Card className="sticky top-24">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-white/50">AI Hair Recovery Kit</p>
-              <p className="mt-1 text-3xl font-black">₹{price.toLocaleString("en-IN")}</p>
-            </div>
-            <Package className="size-8 text-aqua" />
-          </div>
-
-          <div className="mt-6 grid grid-cols-2 gap-3">
-            {[
-              { value: "subscription", label: "Subscribe", icon: Repeat, copy: "Monthly care" },
-              { value: "one_time", label: "One-time", icon: ShoppingCart, copy: "Single kit" }
-            ].map((option) => {
-              const Icon = option.icon;
-              const active = plan === option.value;
+          <div className="mt-8 grid gap-4">
+            {plans.map((plan, index) => {
+              const Icon = plan.icon;
+              const active = planType === plan.planType;
               return (
-                <button
+                <motion.button
+                  key={plan.planType}
                   type="button"
-                  key={option.value}
-                  onClick={() => setPlan(option.value as CartPlan)}
-                  className={`rounded-lg border p-4 text-left transition ${
+                  initial={{ opacity: 0, y: 16 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: index * 0.08 }}
+                  onClick={() => setPlanType(plan.planType)}
+                  className={`rounded-2xl border p-5 text-left transition ${
                     active ? "border-aqua bg-aqua/10" : "border-white/10 bg-white/10 hover:border-white/30"
                   }`}
                 >
-                  <Icon className="mb-4 size-5 text-aqua" />
-                  <p className="font-black">{option.label}</p>
-                  <p className="mt-1 text-xs text-white/50">{option.copy}</p>
-                </button>
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex gap-4">
+                      <span className="grid size-12 place-items-center rounded-2xl bg-white/10 text-aqua">
+                        <Icon className="size-5" />
+                      </span>
+                      <div>
+                        <p className="text-xs font-bold uppercase text-aqua">{plan.badge}</p>
+                        <h2 className="mt-1 text-2xl font-black">{plan.label}</h2>
+                        <p className="mt-2 text-sm leading-6 text-white/60">{plan.copy}</p>
+                      </div>
+                    </div>
+                    <p className="text-2xl font-black">₹{plan.amount.toLocaleString("en-IN")}</p>
+                  </div>
+                </motion.button>
               );
             })}
           </div>
 
-          <div className="mt-6 space-y-3">
-            {[
-              "AI-personalized instructions",
-              "Progress photo upload reminders",
-              "90-day guarantee eligibility workflow",
-              plan === "subscription" ? "Auto-refill every month" : "Full 90-day starter kit"
-            ].map((item) => (
-              <div key={item} className="flex items-center gap-3 text-sm text-white/70">
-                <Check className="size-4 text-leaf" />
-                {item}
+          <div className="mt-8 grid gap-3 sm:grid-cols-2">
+            {kit.map((item) => (
+              <div key={item} className="flex items-start gap-3 rounded-2xl border border-white/10 bg-white/10 p-4">
+                <Check className="mt-0.5 size-4 shrink-0 text-leaf" />
+                <p className="text-sm leading-6 text-white/70">{item}</p>
               </div>
             ))}
           </div>
+        </div>
 
-          <div className="mt-6 grid gap-3">
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => {
-                setCartAdded(true);
-                setMessage("Kit added to cart. You can checkout now.");
-              }}
-            >
-              <ShoppingCart className="size-4" />
-              {cartAdded ? "Added to cart" : "Add to cart"}
-            </Button>
-            <Button
-              type="button"
-              className="bg-aqua text-ink hover:bg-white"
-              onClick={checkout}
-              disabled={loading}
-            >
-              {loading ? <Loader2 className="size-4 animate-spin" /> : <ArrowRight className="size-4" />}
-              Checkout
-            </Button>
+        <Card className="sticky top-24 rounded-2xl">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="text-sm text-white/50">{selectedPlan.label}</p>
+              <p className="mt-1 text-4xl font-black">₹{selectedPlan.amount.toLocaleString("en-IN")}</p>
+            </div>
+            <Package className="size-8 text-aqua" />
           </div>
 
+          <div className="mt-6 grid gap-3 sm:grid-cols-2">
+            {([
+              ["name", "Full name"],
+              ["phone", "Phone"],
+              ["line1", "Address line"],
+              ["line2", "Apartment"],
+              ["city", "City"],
+              ["state", "State"],
+              ["postalCode", "PIN code"]
+            ] as Array<[keyof ShippingAddress, string]>).map(([key, label]) => (
+              <label key={key} className={key === "line1" || key === "line2" ? "sm:col-span-2" : ""}>
+                <span className="text-sm font-semibold text-white/70">{label}</span>
+                <input
+                  value={address[key] || ""}
+                  onChange={(event) => updateAddress(key, event.target.value)}
+                  className="mt-2 w-full rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-white outline-none placeholder:text-white/35 focus:border-aqua"
+                  placeholder={label}
+                />
+              </label>
+            ))}
+          </div>
+
+          <Button
+            type="button"
+            className="mt-6 min-h-14 w-full bg-aqua text-base text-ink hover:bg-white"
+            onClick={checkout}
+            disabled={loading}
+          >
+            {loading ? <Loader2 className="size-5 animate-spin" /> : <ArrowRight className="size-5" />}
+            Pay with Razorpay
+          </Button>
+
           {message ? (
-            <p className="mt-4 rounded-lg border border-white/10 bg-white/10 p-3 text-sm text-white/70">
+            <p className="mt-4 rounded-2xl border border-white/10 bg-white/10 p-4 text-sm leading-6 text-white/70">
               {message}
             </p>
           ) : null}
@@ -215,15 +286,15 @@ export function ProductPage() {
             <div className="flex gap-3">
               <Truck className="size-5 text-saffron" />
               <div>
-                <p className="text-sm font-bold">Fast dispatch</p>
-                <p className="text-xs text-white/50">Tracked orders</p>
+                <p className="text-sm font-bold">Delivery tracking</p>
+                <p className="text-xs text-white/50">Pending, shipped, delivered</p>
               </div>
             </div>
             <div className="flex gap-3">
               <ShieldCheck className="size-5 text-leaf" />
               <div>
-                <p className="text-sm font-bold">Guarantee</p>
-                <p className="text-xs text-white/50">Photo evidence based</p>
+                <p className="text-sm font-bold">90-day guarantee</p>
+                <p className="text-xs text-white/50">Evidence-based review</p>
               </div>
             </div>
           </div>

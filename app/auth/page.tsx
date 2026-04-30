@@ -4,7 +4,7 @@ import { PageShell } from "@/components/ui/page-shell";
 export default function Auth() {
   return (
     <PageShell>
-      <AuthPage />
+      <AuthPage initialMode="sign_up" />
     </PageShell>
   );
 }

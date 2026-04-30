@@ -3,7 +3,7 @@
 @tailwind utilities;
 
 :root {
-  color-scheme: dark;
+  color-scheme: light;
   --bg: #09111f;
   --fg: #f6f8fb;
   --muted: #9eabbc;
@@ -69,9 +69,9 @@ textarea {
   inset: 0;
   overflow: hidden;
   background:
-    linear-gradient(100deg, rgba(9, 17, 31, 0.96) 0%, rgba(10, 24, 42, 0.82) 46%, rgba(245, 247, 251, 0.76) 100%),
-    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.06) 0 1px, transparent 1px 90px),
-    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.05) 0 1px, transparent 1px 90px);
+    linear-gradient(112deg, rgba(255, 255, 255, 0.98) 0%, rgba(232, 252, 249, 0.94) 45%, rgba(246, 248, 251, 0.98) 100%),
+    repeating-linear-gradient(90deg, rgba(9, 17, 31, 0.05) 0 1px, transparent 1px 88px),
+    repeating-linear-gradient(0deg, rgba(9, 17, 31, 0.04) 0 1px, transparent 1px 88px);
 }
 
 .hero-scene::before {
@@ -80,33 +80,29 @@ textarea {
   inset: 9% 6% auto auto;
   width: min(640px, 54vw);
   aspect-ratio: 1.35;
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  border-radius: 8px;
+  border: 1px solid rgba(9, 17, 31, 0.1);
+  border-radius: 24px;
   background:
     linear-gradient(120deg, rgba(68, 215, 198, 0.22), transparent 36%),
-    linear-gradient(15deg, rgba(255, 125, 100, 0.18), transparent 44%),
-    rgba(255, 255, 255, 0.08);
+    linear-gradient(15deg, rgba(255, 125, 100, 0.12), transparent 44%),
+    rgba(255, 255, 255, 0.8);
   transform: perspective(900px) rotateY(-11deg) rotateX(4deg);
-  box-shadow: 0 28px 110px rgba(0, 0, 0, 0.34);
+  box-shadow: 0 28px 110px rgba(9, 17, 31, 0.14);
 }
 
 .hero-scene::after {
   content: "";
   position: absolute;
-  right: 10%;
+  right: 11%;
   bottom: 14%;
-  width: min(430px, 38vw);
-  height: min(430px, 38vw);
-  border-radius: 50%;
-  opacity: 0.9;
+  width: min(390px, 36vw);
+  height: min(520px, 48vw);
+  border-radius: 32px;
   background:
-    radial-gradient(circle at 50% 62%, rgba(247, 200, 111, 0.5) 0 3%, transparent 3.2%),
-    radial-gradient(circle at 41% 42%, rgba(68, 215, 198, 0.52) 0 1.8%, transparent 2%),
-    radial-gradient(circle at 61% 38%, rgba(116, 214, 128, 0.45) 0 1.6%, transparent 1.8%),
-    radial-gradient(circle at 55% 51%, rgba(255, 125, 100, 0.44) 0 1.8%, transparent 2%),
-    linear-gradient(160deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.04));
-  border: 1px solid rgba(255, 255, 255, 0.22);
-  box-shadow: inset 0 0 70px rgba(68, 215, 198, 0.2);
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(246, 248, 251, 0.9)),
+    linear-gradient(90deg, rgba(68, 215, 198, 0.16), transparent);
+  border: 1px solid rgba(9, 17, 31, 0.12);
+  box-shadow: 0 24px 80px rgba(9, 17, 31, 0.12), inset 0 0 0 10px rgba(255, 255, 255, 0.58);
 }
 
 .hair-strand {
@@ -114,9 +110,9 @@ textarea {
   width: 2px;
   height: 78px;
   border-radius: 99px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(68, 215, 198, 0.16));
+  background: linear-gradient(180deg, rgba(9, 17, 31, 0.74), rgba(68, 215, 198, 0.2));
   transform-origin: bottom center;
-  opacity: 0.58;
+  opacity: 0.42;
 }
 
 .no-scrollbar::-webkit-scrollbar {

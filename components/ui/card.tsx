@@ -11,7 +11,7 @@ export function Card({
   light?: boolean;
 }) {
   return (
-    <div className={clsx("rounded-lg p-5", light ? "light-glass text-ink" : "glass", className)}>
+    <div className={clsx("rounded-2xl p-5", light ? "light-glass text-ink" : "glass", className)}>
       {children}
     </div>
   );

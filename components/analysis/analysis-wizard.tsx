@@ -1,11 +1,13 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { ArrowLeft, ArrowRight, BrainCircuit, Check, Loader2 } from "lucide-react";
+import { ArrowLeft, ArrowRight, BrainCircuit, Camera, Check, FileImage, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { compressImage } from "@/lib/image-client";
 import type { AnalysisInput, HairStage } from "@/lib/types";
 
 const stageOptions: Array<{
@@ -85,10 +87,30 @@ export function AnalysisWizard() {
   const router = useRouter();
   const [step, setStep] = useState(0);
   const [input, setInput] = useState<AnalysisInput>(initialInput);
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState("");
   const [loading, setLoading] = useState(false);
-  const totalSteps = 4;
+  const [message, setMessage] = useState("");
+  const totalSteps = 5;
 
   const progress = useMemo(() => ((step + 1) / totalSteps) * 100, [step]);
+
+  useEffect(() => {
+    return () => {
+      if (previewUrl) {
+        URL.revokeObjectURL(previewUrl);
+      }
+    };
+  }, [previewUrl]);
+
+  function chooseImage(file?: File | null) {
+    if (previewUrl) {
+      URL.revokeObjectURL(previewUrl);
+    }
+
+    setImageFile(file || null);
+    setPreviewUrl(file ? URL.createObjectURL(file) : "");
+  }
 
   function toggleValue(key: "lifestyle" | "goals", value: string) {
     setInput((current) => {
@@ -105,13 +127,39 @@ export function AnalysisWizard() {
   async function submit(event?: FormEvent) {
     event?.preventDefault();
     setLoading(true);
+    setMessage("");
+
     try {
-      const response = await fetch("/api/analysis", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(input)
-      });
+      let response: Response;
+
+      if (imageFile) {
+        const compressed = await compressImage(imageFile);
+        const formData = new FormData();
+        formData.append("input", JSON.stringify(input));
+        formData.append("photos", compressed);
+        response = await fetch("/api/analysis", {
+          method: "POST",
+          body: formData
+        });
+      } else {
+        response = await fetch("/api/analysis", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(input)
+        });
+      }
+
+      if (response.status === 401) {
+        router.push("/login?next=/analysis");
+        return;
+      }
+
       const data = await response.json();
+      if (!response.ok) {
+        setMessage(data.error || "Could not generate analysis.");
+        return;
+      }
+
       localStorage.setItem("latestAnalysis", JSON.stringify(data.analysis));
       router.push(`/results/${data.analysis.id}`);
     } catch {
@@ -128,7 +176,7 @@ export function AnalysisWizard() {
           created_at: new Date().toISOString()
         })
       );
-      router.push("/results/offline-demo");
+      setMessage("AI analysis service is unavailable. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -204,6 +252,55 @@ export function AnalysisWizard() {
         ) : null}
 
         {step === 1 ? (
+          <div className="grid gap-8 md:grid-cols-[0.9fr_1.1fr]">
+            <div>
+              <p className="text-sm font-bold text-aqua">Photo scan</p>
+              <h1 className="mt-3 text-3xl font-black md:text-5xl">Add a scalp or hairline image</h1>
+              <p className="mt-4 text-white/60">
+                The AI estimates density, scalp visibility, and recession from your image plus questionnaire.
+              </p>
+              <p className="mt-4 rounded-2xl border border-coral/20 bg-coral/10 p-4 text-sm leading-6 text-white/70">
+                AI-based estimate, not medical diagnosis.
+              </p>
+            </div>
+            <div className="space-y-4">
+              {previewUrl ? (
+                <div className="relative aspect-[4/3] overflow-hidden rounded-2xl border border-white/10 bg-white/10">
+                  <Image src={previewUrl} alt="Selected hair analysis photo" fill className="object-cover" unoptimized />
+                </div>
+              ) : (
+                <div className="grid aspect-[4/3] place-items-center rounded-2xl border border-dashed border-white/20 bg-white/10">
+                  <Camera className="size-10 text-aqua" />
+                </div>
+              )}
+              <div className="grid grid-cols-2 gap-3">
+                <label className="inline-flex min-h-12 cursor-pointer items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-sm font-semibold transition hover:bg-white/20">
+                  <Camera className="size-4" />
+                  Camera
+                  <input
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    className="hidden"
+                    onChange={(event) => chooseImage(event.target.files?.[0])}
+                  />
+                </label>
+                <label className="inline-flex min-h-12 cursor-pointer items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-sm font-semibold transition hover:bg-white/20">
+                  <FileImage className="size-4" />
+                  File
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(event) => chooseImage(event.target.files?.[0])}
+                  />
+                </label>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        {step === 2 ? (
           <div>
             <p className="text-sm font-bold text-aqua">Visual stage</p>
             <h1 className="mt-3 text-3xl font-black md:text-5xl">Select the closest pattern</h1>
@@ -236,7 +333,7 @@ export function AnalysisWizard() {
           </div>
         ) : null}
 
-        {step === 2 ? (
+        {step === 3 ? (
           <div className="grid gap-8 md:grid-cols-[0.9fr_1.1fr]">
             <div>
               <p className="text-sm font-bold text-aqua">Timeline</p>
@@ -271,7 +368,7 @@ export function AnalysisWizard() {
           </div>
         ) : null}
 
-        {step === 3 ? (
+        {step === 4 ? (
           <div>
             <p className="text-sm font-bold text-aqua">Lifestyle and goals</p>
             <h1 className="mt-3 text-3xl font-black md:text-5xl">Personalize the routine</h1>
@@ -342,6 +439,11 @@ export function AnalysisWizard() {
             </Button>
           )}
         </div>
+        {message ? (
+          <p className="mt-4 rounded-2xl border border-white/10 bg-white/10 p-4 text-sm text-white/70">
+            {message}
+          </p>
+        ) : null}
       </Card>
     </form>
   );

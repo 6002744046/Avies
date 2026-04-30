@@ -26,7 +26,7 @@ export function Button({
   ...props
 }: ButtonProps) {
   const classes = clsx(
-    "inline-flex min-h-11 items-center justify-center gap-2 rounded-lg px-5 py-3 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-aqua/60 disabled:cursor-not-allowed disabled:opacity-55",
+    "inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl px-5 py-3 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-aqua/60 disabled:cursor-not-allowed disabled:opacity-55",
     variants[variant],
     className
   );

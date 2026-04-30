@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { motion } from "framer-motion";
+import { useMemo, useRef, useState } from "react";
+import dynamic from "next/dynamic";
+import { motion, useScroll, useTransform } from "framer-motion";
 import {
   ArrowRight,
   BadgeCheck,
@@ -14,12 +15,20 @@ import {
   Star,
   Stethoscope,
   TimerReset,
+  Users,
   WandSparkles
 } from "lucide-react";
-import { HairAssistant } from "@/components/ai/hair-assistant";
 import { Button } from "@/components/ui/button";
 import { Card, SectionHeading } from "@/components/ui/card";
 import { MainNav } from "@/components/ui/nav";
+import type { AuthUser } from "@/lib/auth";
+
+const HairAssistant = dynamic(
+  () => import("@/components/ai/hair-assistant").then((mod) => mod.HairAssistant),
+  {
+    ssr: false
+  }
+);
 
 const steps = [
   {
@@ -50,6 +59,24 @@ const products = [
   "0.5 mm derma roller",
   "Scalp care shampoo",
   "Progress photo protocol"
+];
+
+const trustMarkers = [
+  {
+    title: "10,000+ users",
+    copy: "Progress journeys structured around baseline, day 30, day 60, and day 90 check-ins.",
+    icon: Users
+  },
+  {
+    title: "Dermatologist-backed",
+    copy: "Care prompts are designed to support licensed review where medication may be involved.",
+    icon: Stethoscope
+  },
+  {
+    title: "Clinically tested ingredients",
+    copy: "Routines can include evidence-led staples such as minoxidil support and scalp care.",
+    icon: ShieldCheck
+  }
 ];
 
 const testimonials = [
@@ -194,11 +221,64 @@ function BeforeAfterSlider() {
   );
 }
 
-export function LandingPage() {
+function Scroll3DShowcase() {
+  const ref = useRef<HTMLDivElement | null>(null);
+  const { scrollYProgress } = useScroll({
+    target: ref,
+    offset: ["start end", "end start"]
+  });
+  const rotateX = useTransform(scrollYProgress, [0, 1], [18, -14]);
+  const rotateY = useTransform(scrollYProgress, [0, 1], [-22, 20]);
+  const y = useTransform(scrollYProgress, [0, 1], [50, -50]);
+
   return (
-    <main className="min-h-screen bg-mist text-ink">
-      <MainNav />
-      <section className="relative isolate flex min-h-[88vh] items-center overflow-hidden px-4 pb-16 pt-28 text-white sm:px-6 lg:px-8">
+    <section ref={ref} className="overflow-hidden bg-white px-4 py-20 sm:px-6 lg:px-8">
+      <div className="mx-auto grid max-w-7xl gap-10 lg:grid-cols-[0.85fr_1.15fr] lg:items-center">
+        <div>
+          <p className="text-sm font-bold uppercase text-coral">3D progress path</p>
+          <h2 className="mt-3 text-4xl font-black leading-tight md:text-6xl">
+            Every scroll maps the 90-day journey
+          </h2>
+          <p className="mt-5 max-w-xl text-lg leading-8 text-ink/65">
+            Analysis, checkout, delivery, photo evidence, and refund eligibility move as one tracked system.
+          </p>
+        </div>
+        <div className="relative min-h-[420px] [perspective:1100px]">
+          <motion.div
+            style={{ rotateX, rotateY, y }}
+            className="absolute inset-6 rounded-[2rem] border border-ink/10 bg-mist p-5 shadow-panel [transform-style:preserve-3d]"
+          >
+            {[
+              ["AI scan", "Density, hairline, scalp visibility"],
+              ["Razorpay", "Verified order or subscription"],
+              ["Delivery", "Pending, shipped, delivered"],
+              ["Day 90", "Guarantee review evidence"]
+            ].map(([title, copy], index) => (
+              <div
+                key={title}
+                className="absolute left-6 right-6 rounded-2xl border border-ink/10 bg-white p-5 shadow-sm"
+                style={{
+                  top: `${8 + index * 21}%`,
+                  transform: `translateZ(${index * 44}px) translateX(${index % 2 ? 28 : 0}px)`
+                }}
+              >
+                <p className="text-xs font-bold uppercase text-coral">Step {index + 1}</p>
+                <p className="mt-2 text-2xl font-black">{title}</p>
+                <p className="mt-2 text-sm leading-6 text-ink/60">{copy}</p>
+              </div>
+            ))}
+          </motion.div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+export function LandingPage({ user }: { user: AuthUser | null }) {
+  return (
+    <main className="min-h-screen bg-mist pb-24 text-ink md:pb-0">
+      <MainNav user={user} />
+      <section className="relative isolate flex min-h-[88vh] items-center overflow-hidden px-4 pb-16 pt-28 text-ink sm:px-6 lg:px-8">
         <HeroScene />
         <div className="relative z-10 mx-auto flex w-full max-w-7xl flex-col gap-8">
           <motion.div
@@ -207,45 +287,71 @@ export function LandingPage() {
             transition={{ duration: 0.7 }}
             className="max-w-3xl"
           >
-            <div className="mb-6 inline-flex items-center gap-2 rounded-lg border border-white/20 bg-white/10 px-3 py-2 text-sm text-white/80 backdrop-blur">
+            <div className="mb-6 inline-flex items-center gap-2 rounded-2xl border border-ink/10 bg-white/80 px-3 py-2 text-sm font-semibold text-ink/75 shadow-sm backdrop-blur">
               <Sparkles className="size-4 text-aqua" />
               AI analysis, personalized kits, progress protection
             </div>
             <h1 className="text-5xl font-black leading-[1.02] md:text-7xl">
-              Regrow Your Hair with AI Precision
+              Regrow Your Hair in 90 Days or Money Back
             </h1>
-            <p className="mt-6 max-w-2xl text-lg leading-8 text-white/75">
-              AviEx analyzes your pattern, builds a personal recovery plan, ships the right kit,
-              and tracks visible progress through the 90-day guarantee window.
+            <p className="mt-6 max-w-2xl text-lg leading-8 text-ink/70">
+              AviEx combines AI hair analysis, dermatologist-backed routines, progress tracking,
+              and a transparent 90-day refund workflow for users who need trust before checkout.
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-              <Button href="/analysis" className="bg-aqua text-ink hover:bg-white">
+              <Button href="/analysis" className="min-h-14 rounded-2xl bg-aqua text-base text-ink hover:bg-white">
                 Start Hair Analysis <ArrowRight className="size-4" />
               </Button>
-              <Button href="/product" variant="secondary">
-                View Recovery Kit
+              <Button
+                href={user ? "/dashboard" : "/signup"}
+                variant="ghost"
+                className="min-h-14 rounded-2xl bg-white text-base"
+              >
+                {user ? "Open Dashboard" : "Create Account"}
               </Button>
             </div>
           </motion.div>
-          <div className="grid max-w-3xl grid-cols-1 gap-3 text-sm text-white/70 sm:grid-cols-3">
-            {[
-              ["90-day", "progress guarantee"],
-              ["4-step", "AI care flow"],
-              ["Monthly", "subscription support"]
-            ].map(([value, label]) => (
-              <div key={label} className="rounded-lg border border-white/10 bg-white/10 p-4 backdrop-blur">
-                <p className="text-2xl font-black text-white">{value}</p>
-                <p>{label}</p>
-              </div>
-            ))}
-          </div>
+          <motion.div
+            initial="hidden"
+            animate="visible"
+            variants={{
+              hidden: {},
+              visible: {
+                transition: {
+                  staggerChildren: 0.08
+                }
+              }
+            }}
+            className="grid max-w-4xl grid-cols-1 gap-3 text-sm sm:grid-cols-3"
+          >
+            {trustMarkers.map((item) => {
+              const Icon = item.icon;
+
+              return (
+              <motion.div
+                key={item.title}
+                variants={{
+                  hidden: { opacity: 0, y: 16 },
+                  visible: { opacity: 1, y: 0 }
+                }}
+                className="rounded-2xl border border-ink/10 bg-white/85 p-4 shadow-sm backdrop-blur"
+              >
+                <Icon className="mb-3 size-5 text-coral" />
+                <p className="text-xl font-black text-ink">{item.title}</p>
+                <p className="mt-2 leading-6 text-ink/60">{item.copy}</p>
+              </motion.div>
+              );
+            })}
+          </motion.div>
         </div>
       </section>
 
+      <Scroll3DShowcase />
+
       <section className="px-4 py-20 sm:px-6 lg:px-8">
         <SectionHeading
-          eyebrow="Visible tracking"
-          title="See the change, not just the claim"
+          eyebrow="Before / after"
+          title="Transformation tracking that earns trust"
           copy="Standardized progress photos help users understand whether the routine is working and give admins the evidence needed for guarantee reviews."
         />
         <BeforeAfterSlider />
@@ -301,7 +407,7 @@ export function LandingPage() {
               copy="One kit, two purchase paths, and a routine that adapts to analysis answers and progress milestones."
             />
             <div className="mt-8 flex justify-center gap-3 lg:justify-start">
-              <Button href="/product">Choose a plan</Button>
+              <Button href="/pricing">Choose a plan</Button>
               <Button href="/results/demo" variant="ghost">
                 See sample result
               </Button>
@@ -325,28 +431,36 @@ export function LandingPage() {
 
       <section className="bg-white px-4 py-20 sm:px-6 lg:px-8">
         <SectionHeading
-          eyebrow="Trusted routine"
-          title="Built for confidence before checkout"
+          eyebrow="Trust section"
+          title="Health-grade signals at every step"
           copy="Trust markers are embedded into the journey: clinician prompts, clear AI limits, progress evidence, and guarantee review."
         />
         <div className="mx-auto mt-12 grid max-w-7xl gap-4 md:grid-cols-3">
           {[
-            { label: "Doctor review badge", icon: Stethoscope, copy: "Medication eligibility is positioned for licensed review." },
-            { label: "No diagnosis claims", icon: ShieldCheck, copy: "AI output stays educational and avoids guaranteed outcomes." },
-            { label: "Adherence proof", icon: ClipboardCheck, copy: "Progress uploads support transparent guarantee decisions." }
-          ].map((item) => {
+            { label: "10,000+ users", icon: ClipboardCheck, copy: "Designed for repeated tracking, adherence, and structured progress review." },
+            { label: "Dermatologist-backed", icon: Stethoscope, copy: "Medication eligibility is positioned for licensed clinical review." },
+            { label: "Clinically tested ingredients", icon: ShieldCheck, copy: "Plans can include evidence-led ingredients and scalp care routines." }
+          ].map((item, index) => {
             const Icon = item.icon;
             return (
-              <Card key={item.label} light>
-                <Icon className="size-7 text-coral" />
-                <p className="mt-5 text-xl font-black">{item.label}</p>
-                <p className="mt-3 text-sm leading-6 text-ink/60">{item.copy}</p>
-              </Card>
+              <motion.div
+                key={item.label}
+                initial={{ opacity: 0, y: 18 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true, amount: 0.25 }}
+                transition={{ delay: index * 0.06 }}
+              >
+                <Card light className="h-full rounded-2xl">
+                  <Icon className="size-7 text-coral" />
+                  <p className="mt-5 text-xl font-black">{item.label}</p>
+                  <p className="mt-3 text-sm leading-6 text-ink/60">{item.copy}</p>
+                </Card>
+              </motion.div>
             );
           })}
         </div>
         <div className="mt-10 text-center">
-          <Button href="/product">Build your kit</Button>
+          <Button href="/pricing">Build your kit</Button>
         </div>
       </section>
 
@@ -390,7 +504,7 @@ export function LandingPage() {
               Admins review evidence and approve or reject claims inside the operations panel.
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-              <Button href="/product" className="bg-aqua text-ink hover:bg-white">
+              <Button href="/pricing" className="bg-aqua text-ink hover:bg-white">
                 Start Treatment <ArrowRight className="size-4" />
               </Button>
               <Button href="/dashboard" variant="secondary">
@@ -422,6 +536,11 @@ export function LandingPage() {
       <footer className="bg-mist px-4 py-10 text-center text-sm text-ink/60">
         <p>AviEx provides general hair wellness guidance only. Consult a licensed clinician for medication and diagnosis.</p>
       </footer>
+      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-ink/10 bg-white/90 p-3 shadow-[0_-16px_40px_rgba(9,17,31,0.12)] backdrop-blur md:hidden">
+        <Button href="/analysis" className="min-h-14 w-full rounded-2xl bg-aqua text-base text-ink hover:bg-white">
+          Start Hair Analysis <ArrowRight className="size-5" />
+        </Button>
+      </div>
       <HairAssistant />
     </main>
   );

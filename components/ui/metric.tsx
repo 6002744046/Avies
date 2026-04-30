@@ -20,10 +20,10 @@ export function Metric({
   };
 
   return (
-    <div className="rounded-lg border border-ink/10 bg-white p-4 shadow-sm">
+    <div className="rounded-2xl border border-ink/10 bg-white p-4 shadow-sm">
       <div
         className={clsx(
-          "mb-4 grid size-10 place-items-center rounded-lg border",
+          "mb-4 grid size-10 place-items-center rounded-2xl border",
           toneMap[tone]
         )}
       >

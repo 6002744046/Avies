@@ -1,42 +1,45 @@
-import { NextResponse } from "next/server";
-import { createServerSupabaseClient } from "@/lib/supabase";
+import { NextRequest, NextResponse } from "next/server";
+import { getCurrentUserFromRequest } from "@/lib/auth";
+import { createFirebaseAdminDb, FieldValue } from "@/lib/firebase-admin";
 
-export async function POST(request: Request) {
+export const runtime = "nodejs";
+
+export async function POST(request: NextRequest) {
+  const session = await getCurrentUserFromRequest(request);
+
+  if (!session) {
+    return NextResponse.json({ message: "Login is required to request a refund review." }, { status: 401 });
+  }
+
   try {
     const body = (await request.json()) as { reason?: string };
     const reason =
       body.reason || "Completed 90-day routine and requesting visible progress review.";
-    const supabase = createServerSupabaseClient();
+    const db = createFirebaseAdminDb();
 
-    if (!supabase) {
-      return NextResponse.json({
-        message: "Demo guarantee request submitted. Add Supabase keys to persist refund reviews.",
-        refund: {
-          id: `refund_demo_${Date.now()}`,
-          reason,
-          status: "Pending",
-          created_at: new Date().toISOString()
-        }
-      });
+    if (!db) {
+      return NextResponse.json(
+        { message: "Firebase Admin database is not configured for refund reviews." },
+        { status: 503 }
+      );
     }
 
-    const { data, error } = await supabase
-      .from("refund_requests")
-      .insert({
-        reason,
-        status: "Pending"
-      })
-      .select("*")
-      .single();
-
-    if (error) {
-      console.error("Refund insert failed", error);
-      return NextResponse.json({ message: "Could not submit guarantee request." }, { status: 500 });
-    }
+    const refundRef = await db.collection("refundRequests").add({
+      createdAt: FieldValue.serverTimestamp(),
+      evidenceWindowDays: 90,
+      reason,
+      status: "pending",
+      userEmail: session.user.email,
+      userId: session.user.uid
+    });
 
     return NextResponse.json({
       message: "Guarantee request submitted for admin review.",
-      refund: data
+      refund: {
+        id: refundRef.id,
+        reason,
+        status: "pending"
+      }
     });
   } catch (error) {
     console.error("Refund route failed", error);

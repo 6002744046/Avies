@@ -5,10 +5,15 @@ create table if not exists public.users (
   auth_user_id uuid unique references auth.users(id) on delete cascade,
   email text,
   full_name text,
-  role text not null default 'customer' check (role in ('customer', 'admin')),
+  role text not null default 'user' check (role in ('user', 'admin')),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table public.users drop constraint if exists users_role_check;
+update public.users set role = 'user' where role is null or role = 'customer';
+alter table public.users alter column role set default 'user';
+alter table public.users add constraint users_role_check check (role in ('user', 'admin'));
 
 create table if not exists public.hair_analysis (
   id uuid primary key default gen_random_uuid(),
@@ -94,10 +99,45 @@ begin
 end;
 $$;
 
+create or replace function public.prevent_client_role_change()
+returns trigger
+language plpgsql
+as $$
+begin
+  if old.role is distinct from new.role
+    and coalesce(auth.role(), '') <> 'service_role'
+    and current_user not in ('postgres', 'supabase_admin') then
+    raise exception 'Only service-role server code can change user roles';
+  end if;
+
+  return new;
+end;
+$$;
+
+create or replace function public.current_user_is_admin()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1
+    from public.users
+    where auth_user_id = auth.uid()
+      and role = 'admin'
+  );
+$$;
+
 drop trigger if exists users_set_updated_at on public.users;
 create trigger users_set_updated_at
 before update on public.users
 for each row execute function public.set_updated_at();
+
+drop trigger if exists users_prevent_client_role_change on public.users;
+create trigger users_prevent_client_role_change
+before update of role on public.users
+for each row execute function public.prevent_client_role_change();
 
 drop trigger if exists orders_set_updated_at on public.orders;
 create trigger orders_set_updated_at
@@ -122,6 +162,20 @@ alter table public.subscriptions enable row level security;
 alter table public.progress_photos enable row level security;
 alter table public.refund_requests enable row level security;
 
+drop policy if exists "Users can read their profile" on public.users;
+drop policy if exists "Users can update their profile" on public.users;
+drop policy if exists "Admins can read all profiles" on public.users;
+drop policy if exists "Users can read their analyses" on public.hair_analysis;
+drop policy if exists "Admins can read all analyses" on public.hair_analysis;
+drop policy if exists "Users can read their orders" on public.orders;
+drop policy if exists "Admins can read all orders" on public.orders;
+drop policy if exists "Users can read their subscriptions" on public.subscriptions;
+drop policy if exists "Admins can read all subscriptions" on public.subscriptions;
+drop policy if exists "Users can manage their progress photos" on public.progress_photos;
+drop policy if exists "Admins can read all progress photos" on public.progress_photos;
+drop policy if exists "Users can manage their refund requests" on public.refund_requests;
+drop policy if exists "Admins can manage all refund requests" on public.refund_requests;
+
 create policy "Users can read their profile"
 on public.users for select
 using (auth.uid() = auth_user_id);
@@ -131,11 +185,19 @@ on public.users for update
 using (auth.uid() = auth_user_id)
 with check (auth.uid() = auth_user_id);
 
+create policy "Admins can read all profiles"
+on public.users for select
+using (public.current_user_is_admin());
+
 create policy "Users can read their analyses"
 on public.hair_analysis for select
 using (
   user_id in (select id from public.users where auth_user_id = auth.uid())
 );
+
+create policy "Admins can read all analyses"
+on public.hair_analysis for select
+using (public.current_user_is_admin());
 
 create policy "Users can read their orders"
 on public.orders for select
@@ -143,11 +205,19 @@ using (
   user_id in (select id from public.users where auth_user_id = auth.uid())
 );
 
+create policy "Admins can read all orders"
+on public.orders for select
+using (public.current_user_is_admin());
+
 create policy "Users can read their subscriptions"
 on public.subscriptions for select
 using (
   user_id in (select id from public.users where auth_user_id = auth.uid())
 );
+
+create policy "Admins can read all subscriptions"
+on public.subscriptions for select
+using (public.current_user_is_admin());
 
 create policy "Users can manage their progress photos"
 on public.progress_photos for all
@@ -158,6 +228,10 @@ with check (
   user_id in (select id from public.users where auth_user_id = auth.uid())
 );
 
+create policy "Admins can read all progress photos"
+on public.progress_photos for select
+using (public.current_user_is_admin());
+
 create policy "Users can manage their refund requests"
 on public.refund_requests for all
 using (
@@ -166,6 +240,11 @@ using (
 with check (
   user_id in (select id from public.users where auth_user_id = auth.uid())
 );
+
+create policy "Admins can manage all refund requests"
+on public.refund_requests for all
+using (public.current_user_is_admin())
+with check (public.current_user_is_admin());
 
 insert into storage.buckets (id, name, public)
 values ('progress-photos', 'progress-photos', true)

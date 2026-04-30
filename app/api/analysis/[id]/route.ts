@@ -1,20 +1,44 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { getCurrentUserFromRequest, serializeFirestoreDate } from "@/lib/auth";
+import { createFirebaseAdminDb } from "@/lib/firebase-admin";
 import { demoAnalysis } from "@/lib/recommendations";
-import { createServerSupabaseClient } from "@/lib/supabase";
 import type { AnalysisInput } from "@/lib/types";
+
+export const runtime = "nodejs";
 
 const fallbackInput: AnalysisInput = {
   age: 31,
-  gender: "male",
-  stage: "moderate",
   duration: "1_3_years",
   familyHistory: true,
+  gender: "male",
+  goals: ["regrow_density", "protect_hairline"],
   lifestyle: ["stress", "sleep"],
-  goals: ["regrow_density", "protect_hairline"]
+  stage: "moderate"
 };
 
+function mapAnalysis(id: string, data: Record<string, unknown>) {
+  const createdAt = serializeFirestoreDate(data.createdAt) || new Date().toISOString();
+  return {
+    aiResult: data.aiResult,
+    aiSummary: data.aiSummary,
+    ai_summary: data.aiSummary,
+    createdAt,
+    created_at: createdAt,
+    id,
+    imageUrls: Array.isArray(data.imageUrls) ? data.imageUrls : [],
+    input: data.input,
+    riskScore: data.riskScore,
+    risk_score: data.riskScore,
+    stage: data.stage,
+    treatmentPlan: data.treatmentPlan,
+    treatment_plan: data.treatmentPlan,
+    userId: data.userId,
+    user_id: data.userId
+  };
+}
+
 export async function GET(
-  _request: Request,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
@@ -24,20 +48,26 @@ export async function GET(
     return NextResponse.json({ analysis: { ...fallback, id } });
   }
 
-  const supabase = createServerSupabaseClient();
-  if (!supabase) {
-    return NextResponse.json({ analysis: { ...fallback, id }, mode: "demo" });
+  const session = await getCurrentUserFromRequest(request);
+  if (!session) {
+    return NextResponse.json({ error: "Login is required to view this analysis." }, { status: 401 });
   }
 
-  const { data, error } = await supabase
-    .from("hair_analysis")
-    .select("*")
-    .eq("id", id)
-    .single();
-
-  if (error || !data) {
-    return NextResponse.json({ analysis: { ...fallback, id }, mode: "demo" });
+  const db = createFirebaseAdminDb();
+  if (!db) {
+    return NextResponse.json({ error: "Firebase Admin database is not configured." }, { status: 503 });
   }
 
-  return NextResponse.json({ analysis: data, mode: "database" });
+  const snapshot = await db.collection("analysisReports").doc(id).get();
+
+  if (!snapshot.exists) {
+    return NextResponse.json({ error: "Analysis report was not found." }, { status: 404 });
+  }
+
+  const data = snapshot.data() || {};
+  if (data.userId !== session.user.uid && session.user.role !== "admin") {
+    return NextResponse.json({ error: "You do not have access to this analysis." }, { status: 403 });
+  }
+
+  return NextResponse.json({ analysis: mapAnalysis(snapshot.id, data), mode: "firestore" });
 }
